@@ -40,6 +40,9 @@ instance Foreign a => Foreign (Fay a)
 -- | Functions are foreignable.
 instance (Foreign a,Foreign b) => Foreign (a -> b)
 
+-- | Tuples are foreignable.
+instance (Foreign a,Foreign b) => Foreign (a, b)
+
 -- | Declare a foreign action.
 ffi
   :: Foreign a

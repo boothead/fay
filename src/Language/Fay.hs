@@ -123,7 +123,7 @@ printTestJsAst src =
     ParseOk mod -> do
       compiled <- runCompile (defaultCompileState def) $ compileModule mod
       case compiled of
-        Right (js, _) -> putStr (ppShow js) >> putStr "\n"
+        Right (js, _) -> pPrint js
         Left err -> print err
     _ -> error "parseFay error"
 
@@ -131,16 +131,18 @@ printTestJsAst src =
 printTestHsAst :: String -> IO ()
 printTestHsAst src =
   case parseFay src of
-    ParseOk (Module _ _ _ _ _ _ decls) -> do
-      putStr (ppShow decls) >> putStr "\n"
+    ParseOk (Module _ _ _ _ _ _ decls) -> pPrint decls
     _ -> error "parseFay error"
 
 printCompiler :: Show a => Compile a -> IO ()
 printCompiler comp = do
   compiled <- runCompile (defaultCompileState def) comp
   case compiled of
-    Right (js, _) -> putStr (ppShow js) >> putStr "\n"
+    Right (js, _) -> pPrint js
     Left err -> print err
+
+pPrint :: Show a => a -> IO ()
+pPrint a = putStr (ppShow a) >> putStr "\n"
 
 -- | Compile the given Fay code for the documentation. This is
 -- specialised because the documentation isn't really “real”
@@ -441,6 +443,7 @@ typeRep typ =
     FunctionType xs     -> JsList [JsLit $ JsStr "function",JsList (map typeRep xs)]
     JsType x            -> JsList [JsLit $ JsStr "action",JsList [typeRep x]]
     ListType x          -> JsList [JsLit $ JsStr "list",JsList [typeRep x]]
+    TupleType xs        -> JsList [JsLit $ JsStr "tuple",JsList (map typeRep xs)]
     UserDefined name xs -> JsList [JsLit $ JsStr "user"
                                   ,JsLit $ JsStr (unname name)
                                   ,JsList (map typeRep xs)]
@@ -474,6 +477,7 @@ argType t =
     TyApp (TyCon "Fay") a -> JsType (argType a)
     TyFun x xs            -> FunctionType (argType x : functionTypeArgs xs)
     TyList x              -> ListType (argType x)
+    TyTuple _ xs          -> TupleType (map argType xs)
     TyParen st            -> argType st
     TyApp op arg          -> userDefined (reverse (arg : expandApp op))
     _                     ->
@@ -511,19 +515,13 @@ compileUnguardedRhs srcloc toplevel ident rhs = do
   return [bind]
 
 compileLazyPat :: SrcLoc -> Bool -> Pat -> Exp -> Compile [JsStmt]
-compileLazyPat srcloc toplevel tup@(PTuple vars) rhs = do
+compileLazyPat _ _ (PTuple vars) rhs = do
   body <- compileExp rhs
-  bind <- bindToplevel srcloc toplevel ident $ thunk body
-  unpacked <- compilePList vars [] $ JsName ident
-  return $ bind : map thunkVar unpacked
-  where bindName = concat . intersperse "_" $ genName tup
-        ident = UnQual $ Ident bindName
-
-        genName :: Pat -> [String]
-        genName (PVar (Ident nm)) = [nm]
-        genName (PTuple vars) = concatMap genName vars
-        genName _ = ["__"]
-
+  -- bind <- bindToplevel srcloc toplevel ident $ thunk body
+  -- liftIO $ pPrint body
+  unpacked <- compilePTuple vars [] body
+  return $ map thunkVar unpacked
+  where
         thunkVar (JsVar nm app) = JsVar nm $ thunk app
         thunkVar _ = undefined
 
@@ -825,7 +823,7 @@ compileExp exp =
     Let (BDecls decls) exp        -> compileLet decls exp
     List []                       -> return JsNull
     List xs                       -> compileList xs
-    Tuple xs                      -> compileList xs
+    Tuple xs                      -> compileTuple xs
     If cond conseq alt            -> compileIf cond conseq alt
     Case exp alts                 -> compileCase exp alts
     Con (UnQual (Ident "True"))   -> return (JsLit (JsBool True))
@@ -899,6 +897,12 @@ compileList :: [Exp] -> Compile JsExp
 compileList xs = do
   exps <- mapM compileExp xs
   return (makeList exps)
+
+compileTuple :: [Exp] -> Compile JsExp
+compileTuple xs = do
+  exps <- mapM compileExp xs
+  return . JsTuple (length xs) $ zip [0..] (map thunk exps)
+
 
 makeList :: [JsExp] -> JsExp
 makeList exps = (JsApp (JsName (hjIdent "list")) [JsList exps])
@@ -991,7 +995,7 @@ compilePat exp pat body =
     PWildCard       -> return body
     pat@PInfixApp{} -> compileInfixPat exp pat body
     PList pats      -> compilePList pats body exp
-    PTuple pats     -> compilePList pats body exp
+    PTuple pats     -> compilePTuple pats body exp
     PAsPat name pat -> compilePAsPat exp name pat body
     pat             -> throwError (UnsupportedPattern pat)
 
@@ -1080,6 +1084,14 @@ compilePList pats body exp = do
   foldM (\body (i,pat) -> compilePat (JsApp (JsApp (JsName (hjIdent "index"))
                                                    [JsLit (JsInt i)])
                                             [forcedExp])
+                                     pat body)
+        body
+        (reverse (zip [0..] pats))
+
+compilePTuple :: [Pat] -> [JsStmt] -> JsExp -> Compile [JsStmt]
+compilePTuple pats body exp = do
+  let forcedExp = force exp
+  foldM (\body (i,pat) -> compilePat (JsLookup forcedExp (JsLit (JsInt i)))
                                      pat body)
         body
         (reverse (zip [0..] pats))

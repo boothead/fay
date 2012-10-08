@@ -141,6 +141,8 @@ instance Printable JsExp where
     printJS exp; " instanceof "; printJS classname
   printJS (JsObj assoc) = do "{"; intercalateM "," (map cons assoc); "}"
      where cons (key,value) = do "\""; write key; "\": "; printJS value
+  printJS (JsTuple _ assoc) = do "{"; intercalateM "," (map cons assoc); "}"
+     where cons (key,value) = do "\""; write (show key); "\": "; printJS value
   printJS (JsFun params stmts ret) = do
     "function("
     intercalateM "," (map printJS params)

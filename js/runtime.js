@@ -150,6 +150,17 @@ function Fay$$fayToJs(type,fayObj){
         jsObj = arr;
         break;
     }
+    case "tuple": {
+        // Serialize tuple to JavaScript array.
+        var arr = [];
+        fayObj = _(fayObj);
+        for (var i = 0, len = fayObj.length; i < len; i++) {
+            // Unserialize each JS value into a Fay value, too.
+            arr.push(Fay$$fayToJs(args[i],fayObj[i]));
+        }
+        fayObj = arr;
+        break;;
+    }
     case "double": {
         // Serialize double, just force the argument. Doubles are unboxed.
         jsObj = _(fayObj);
@@ -203,6 +214,17 @@ function Fay$$jsToFay(type,jsObj){
         // Pop it all in a Fay list.
         fayObj = Fay$$list(serializedList);
         break;
+    }
+    case "tuple": {
+        var values = [];
+        for (var i = 0, len = jsObj.length; i < len; i++) {
+            // Unserialize each JS value into a Fay value, too.
+            values.push(Fay$$jsToFay(args[i],jsObj[i]));
+        }
+        // Pop it all in a Fay list.
+        fayObj = values;
+        break;
+
     }
     case "double": {
         // Doubles are unboxed, so there's nothing to do.

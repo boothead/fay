@@ -190,6 +190,7 @@ data JsExp
   | JsEq JsExp JsExp
   | JsInfix String JsExp JsExp -- Used to optimize *, /, +, etc
   | JsObj [(String,JsExp)]
+  | JsTuple Int [(Int, JsExp)]
   deriving (Show,Eq)
 
 -- | Literal value type.
@@ -211,6 +212,7 @@ data FundamentalType
  = FunctionType [FundamentalType]
  | JsType FundamentalType
  | ListType FundamentalType
+ | TupleType [FundamentalType]
  | UserDefined Name [FundamentalType]
  -- Simple types.
  | DateType
