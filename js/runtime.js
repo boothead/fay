@@ -154,11 +154,11 @@ function Fay$$fayToJs(type,fayObj){
         // Serialize tuple to JavaScript array.
         var arr = [];
         fayObj = _(fayObj);
-        for (var i = 0, len = fayObj.length; i < len; i++) {
+        for (var i = 0, len = args.length; i < len; i++) {
             // Unserialize each JS value into a Fay value, too.
             arr.push(Fay$$fayToJs(args[i],fayObj[i]));
         }
-        fayObj = arr;
+        jsObj = arr;
         break;;
     }
     case "double": {
@@ -292,6 +292,15 @@ function Fay$$index(index){
         return list.car;
     };
 }
+
+/*******************************************************************************
+ * Tuple.
+ */
+function Fay$$unpackTuple(tuple, index) {
+    return new $(function() {
+        return _(tuple)[index];
+    });
+};
 
 /*******************************************************************************
  * Numbers.

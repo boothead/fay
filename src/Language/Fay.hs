@@ -515,13 +515,21 @@ compileUnguardedRhs srcloc toplevel ident rhs = do
   return [bind]
 
 compileLazyPat :: SrcLoc -> Bool -> Pat -> Exp -> Compile [JsStmt]
-compileLazyPat _ _ (PTuple vars) rhs = do
+compileLazyPat srcloc toplevel tup@(PTuple vars) rhs = do
   body <- compileExp rhs
-  -- bind <- bindToplevel srcloc toplevel ident $ thunk body
-  -- liftIO $ pPrint body
-  unpacked <- compilePTuple vars [] body
-  return $ map thunkVar unpacked
-  where
+  --return $ map thunkVar unpacked
+  -- bind <- bindToplevel srcloc toplevel ident body
+  unpacked <- compilePTuple vars [] body -- $ JsName ident
+  return $ unpacked
+  where bindName = concat . intersperse "_" $ genName tup
+
+        ident = UnQual $ Ident bindName
+
+        genName :: Pat -> [String]
+        genName (PVar (Ident nm)) = [nm]
+        genName (PTuple vars) = concatMap genName vars
+        genName _ = ["__"]
+
         thunkVar (JsVar nm app) = JsVar nm $ thunk app
         thunkVar _ = undefined
 
@@ -850,7 +858,7 @@ instance CompilesTo Exp JsExp where compileTo = compileExp
 compileApp :: Exp -> Exp -> Compile JsExp
 compileApp exp1 exp2 = do
    flattenApps <- config configFlattenApps
-   if flattenApps then method2 else method1
+   thunk <$> if flattenApps then method2 else method1
    where
   -- Method 1:
   -- In this approach code ends up looking like this:
@@ -1090,8 +1098,9 @@ compilePList pats body exp = do
 
 compilePTuple :: [Pat] -> [JsStmt] -> JsExp -> Compile [JsStmt]
 compilePTuple pats body exp = do
-  let forcedExp = force exp
-  foldM (\body (i,pat) -> compilePat (JsLookup forcedExp (JsLit (JsInt i)))
+  -- liftIO $ pPrint body >> pPrint forcedExp >> print "------"
+  foldM (\body (i,pat) -> compilePat (JsApp (JsName (hjIdent "unpackTuple"))
+                                                   [exp, JsLit (JsInt i)])
                                      pat body)
         body
         (reverse (zip [0..] pats))
